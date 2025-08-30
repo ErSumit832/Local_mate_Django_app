@@ -1,5 +1,4 @@
 
-
 # LocalMate.
 
 **LocalMate** is a platform that connects travelers with local guides to discover authentic experiences, hidden spots, and the true soul of a city. Tourists can explore like locals, while guides earn by sharing their knowledge.
