@@ -1,8 +1,6 @@
 db.sqlite3
 restore.sh
 .env
-nginx
-infrastructure 
-jenkinsfile
-user,sh
+
+
 
