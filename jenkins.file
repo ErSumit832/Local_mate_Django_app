@@ -1,25 +1,99 @@
 pipeline {
     agent any
+
+    environment {
+        // DockerHub credentials stored in Jenkins Credentials as 'dockerhub-creds'
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+        IMAGE_NAME = "ersumit832/local_mate_django_app"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        FULL_IMAGE = "${IMAGE_NAME}:${IMAGE_TAG}"
+        // Email notification settings
+        EMAIL_RECIPIENTS = "your-team@example.com"
+    }
+
+    options {
+        // Discard old builds to save space and improve security
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        // Fail the build if any stage fails
+        skipStagesAfterUnstable()
+        timestamps()
+    }
+
+    triggers {
+        // Enable for scheduled builds if needed
+        // cron('H H * * *')
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/ErSumit832/Local_mate_Django_app.git'
+                checkout scm
             }
         }
-        stage('Build') {
+
+        stage('Build Docker Image') {
             steps {
-                echo "Building the project..."
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-creds') {
+                        sh "docker build --pull --no-cache -t $FULL_IMAGE ."
+                    }
+                }
             }
         }
-        stage('Test') {
+
+        stage('Trivy Security Scan') {
             steps {
-                echo "Running tests..."
+                script {
+                    // Install Trivy if not present
+                    sh '''
+                        if ! command -v trivy >/dev/null 2>&1; then
+                            wget -qO- https://github.com/aquasecurity/trivy/releases/latest/download/trivy_$(uname -s)_$(uname -m).tar.gz | tar zxv -C /usr/local/bin trivy
+                        fi
+                    '''
+                    // Scan Docker image
+                    sh "trivy image --exit-code 1 --severity CRITICAL,HIGH $FULL_IMAGE"
+                }
             }
         }
+
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-creds') {
+                        sh "docker push $FULL_IMAGE"
+                    }
+                }
+            }
+        }
+
         stage('Deploy') {
             steps {
-                echo "Deploying..."
+                echo "Deploying $FULL_IMAGE to production environment..."
+                // Add your deployment logic here (e.g., kubectl, ansible, etc.)
             }
+        }
+    }
+
+    post {
+        always {
+            // Clean up Docker images to avoid disk space issues
+            sh "docker rmi $FULL_IMAGE || true"
+        }
+        success {
+            emailext (
+                subject: "SUCCESS: Build #${env.BUILD_NUMBER} for Local Mate Django App",
+                body: "Good news! The build and deploy pipeline for Local Mate Django App succeeded.\n\nDocker Image: $FULL_IMAGE\nSee details at: ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: "${EMAIL_RECIPIENTS}"
+            )
+        }
+        failure {
+            emailext (
+                subject: "FAILURE: Build #${env.BUILD_NUMBER} for Local Mate Django App",
+                body: "Unfortunately, the build and deploy pipeline FAILED.\n\nCheck the logs at: ${env.BUILD_URL}",
+                recipientProviders: [[$class: 'DevelopersRecipientProvider']],
+                to: "${EMAIL_RECIPIENTS}"
+            )
         }
     }
 }
