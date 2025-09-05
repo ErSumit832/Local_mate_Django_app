@@ -1,21 +1,32 @@
+# --------------------------
+# Builder stage
+# --------------------------
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+# Install dependencies in a clean folder
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt --target=/app/deps
 
+# --------------------------
+# Final stage
+# --------------------------
 FROM python:3.11-slim
 
 WORKDIR /app
 
+# Copy installed deps first
 COPY --from=builder /app/deps /app/deps
 
-COPY --from=builder /app .
+# Add deps to PYTHONPATH
+ENV PYTHONPATH=/app/deps
 
-ENV PATH=/app/deps/bin:$PATH
-
+# Copy project code
 COPY . .
 
+# Expose Django port
+EXPOSE 8000
+
+# Start Django (dev server)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
